@@ -28,13 +28,20 @@ ENV/
 # IDEs
 .vscode/
 .idea/
+.vs/
 
 # Project Specific
 pocketbase.exe
 pb_data/
 engine.log
 .agents/
+artifacts/
 datasets/
 resources/targets/
 *.spec
 *.exe
+
+# Temporary / Scratch / Debug files
+scratch_*.py
+debug_*.png
+roi_debug_full.png
