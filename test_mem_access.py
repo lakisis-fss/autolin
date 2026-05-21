@@ -73,9 +73,11 @@ def scan_memory_regions(handle, max_regions=20):
         if result == 0:
             break
         
+        base_addr = mbi.BaseAddress if mbi.BaseAddress is not None else address
+        
         if mbi.State == MEM_COMMIT:
             regions.append({
-                'base': mbi.BaseAddress,
+                'base': base_addr,
                 'size': mbi.RegionSize,
                 'protect': mbi.Protect,
                 'type': mbi.Type
@@ -84,8 +86,8 @@ def scan_memory_regions(handle, max_regions=20):
                 readable_regions += 1
                 total_readable_size += mbi.RegionSize
         
-        address = mbi.BaseAddress + mbi.RegionSize
-        if address <= mbi.BaseAddress:
+        address = base_addr + mbi.RegionSize
+        if address <= base_addr:
             break
     
     return regions, readable_regions, total_readable_size

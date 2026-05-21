@@ -160,7 +160,7 @@ class CVStateReader:
                     hp_crop = hpmp_bar[:, :165]
                     mp_crop = hpmp_bar[:, 165:]
                     
-                    hp_text_crop = hp_crop[22:37, 22:108]
+                    hp_text_crop = hp_crop[22:37, 25:108]
                     mp_text_crop = mp_crop[22:37, 107:158]
                     
                     # Apply White Color Filter to completely erase red/blue background bars!

@@ -115,6 +115,9 @@ class PixelOCR:
         for th in thresholds:
             text = self._read_text_single(crop_img, th, is_hpmp, name)
             
+            if name in ["HP_Bar", "MP_Bar"]:
+                text = re.sub(r"[^\d/]", "", text)
+            
             # Format correction helper inside loop for compliance checks
             if name in ["EXP", "MR", "WEIGHT", "FOOD"]:
                 if len(text) > 0 and text[-1] not in ['%', 'g']:

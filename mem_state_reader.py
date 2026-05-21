@@ -15,9 +15,9 @@ class MemStateReader:
             "mp": 0x1436044,
             "max_mp": 0x1436048,
             "weight": 0x143604C,
-            "pos_x": 0x14940f0,  # [검증됨] 실시간 절대 X좌표 오프셋
-            "pos_y": 0x14940f4,  # [검증됨] 실시간 절대 Y좌표 오프셋
-            "heading": 0x14940f8 # [검증됨] 실시간 캐릭터 방향 오프셋
+            "pos_x": 0x149b350,  # [검증됨] 실시간 절대 X좌표 오프셋
+            "pos_y": 0x149b354,  # [검증됨] 실시간 절대 Y좌표 오프셋
+            "heading": 0x149b358 # [검증됨] 실시간 캐릭터 방향 오프셋
         }
         self.last_attach_attempt = 0
 

@@ -8,6 +8,7 @@ import threading
 import time
 import socket
 import state_monitor
+from navigator import Navigator
 
 class BauhausDashboard:
     def __init__(self):
@@ -29,7 +30,7 @@ class BauhausDashboard:
         screen_w = self.root.winfo_screenwidth()
         screen_h = self.root.winfo_screenheight()
         self.full_width = 400
-        self.height = 750
+        self.height = 850
         x_pos = screen_w - self.full_width - 50
         y_pos = (screen_h - self.height) // 2
         
@@ -41,6 +42,7 @@ class BauhausDashboard:
         # State Management
         self.is_minimized = False
         self.min_width = 40
+        self._dragging = False
         
         # Drag Binding
         self.root.bind("<Button-1>", self.start_drag)
@@ -49,6 +51,8 @@ class BauhausDashboard:
         # State Monitor
         self.monitor = state_monitor.StateMonitor()
         self.monitor.start()
+        
+        self.navigator = Navigator(self.monitor.mem_reader)
         
         self.engines = {
             "PocketBase": {
@@ -102,6 +106,7 @@ class BauhausDashboard:
         tk.Frame(self.container, bg=self.colors["gray"], height=2).pack(fill="x", padx=30, pady=20)
         
         self.create_state_section()
+        self.create_navigation_section()
         
         # Engine Control Items
         for name, config in self.engines.items():
@@ -117,10 +122,17 @@ class BauhausDashboard:
         self.root.after(100, self.update_state_ui)
 
     def start_drag(self, event):
+        # Entry, Canvas(버튼) 클릭 시 드래그 방지
+        if isinstance(event.widget, (tk.Entry, tk.Canvas)):
+            self._dragging = False
+            return
+        self._dragging = True
         self.x = event.x
         self.y = event.y
 
     def do_drag(self, event):
+        if not self._dragging:
+            return
         x = self.root.winfo_x() + (event.x - self.x)
         y = self.root.winfo_y() + (event.y - self.y)
         self.root.geometry(f"+{x}+{y}")
@@ -221,6 +233,96 @@ class BauhausDashboard:
         # Separator line
         tk.Frame(self.container, bg=self.colors["gray"], height=1).pack(fill="x", padx=30, pady=15)
 
+    def create_navigation_section(self):
+        """맵좌표 이동 제어 UI 섹션 (Bauhaus 스타일)"""
+        nav_frame = tk.Frame(self.container, bg=self.colors["bg"], padx=30)
+        nav_frame.pack(fill="x", pady=(0, 5))
+
+        # Section header
+        tk.Label(nav_frame, text="NAVIGATE", fg=self.colors["yellow"],
+                 bg=self.colors["bg"], font=("Arial", 10, "bold")).pack(anchor="w")
+
+        # ── 좌표 입력 행 ──
+        input_frame = tk.Frame(nav_frame, bg=self.colors["bg"])
+        input_frame.pack(fill="x", pady=(5, 5))
+
+        tk.Label(input_frame, text="X", fg=self.colors["text_gray"],
+                 bg=self.colors["bg"], font=("Arial", 9, "bold")).pack(side="left")
+
+        self.nav_x_entry = tk.Entry(
+            input_frame, width=7, bg="#1E1E1E", fg=self.colors["white"],
+            insertbackground=self.colors["white"], font=("Arial", 10),
+            relief="flat", bd=0, highlightthickness=1,
+            highlightbackground=self.colors["gray"]
+        )
+        self.nav_x_entry.pack(side="left", padx=(4, 10))
+
+        tk.Label(input_frame, text="Y", fg=self.colors["text_gray"],
+                 bg=self.colors["bg"], font=("Arial", 9, "bold")).pack(side="left")
+
+        self.nav_y_entry = tk.Entry(
+            input_frame, width=7, bg="#1E1E1E", fg=self.colors["white"],
+            insertbackground=self.colors["white"], font=("Arial", 10),
+            relief="flat", bd=0, highlightthickness=1,
+            highlightbackground=self.colors["gray"]
+        )
+        self.nav_y_entry.pack(side="left", padx=(4, 0))
+
+        # ── 버튼 행 ──
+        btn_frame = tk.Frame(nav_frame, bg=self.colors["bg"])
+        btn_frame.pack(fill="x", pady=(3, 3))
+
+        # GO 버튼
+        go_btn = tk.Canvas(btn_frame, width=50, height=24,
+                           bg=self.colors["bg"], highlightthickness=0)
+        go_btn.pack(side="left", padx=(0, 5))
+        go_btn.create_rectangle(0, 0, 50, 24, fill="#2D7D46", outline=self.colors["gray"])
+        go_btn.create_text(25, 12, text="GO", fill=self.colors["white"], font=("Arial", 9, "bold"))
+        go_btn.bind("<Button-1>", lambda e: self.on_nav_go())
+
+        # STOP 버튼
+        stop_btn = tk.Canvas(btn_frame, width=50, height=24,
+                             bg=self.colors["bg"], highlightthickness=0)
+        stop_btn.pack(side="left", padx=(0, 5))
+        stop_btn.create_rectangle(0, 0, 50, 24, fill=self.colors["red"], outline=self.colors["gray"])
+        stop_btn.create_text(25, 12, text="STOP", fill=self.colors["white"], font=("Arial", 9, "bold"))
+        stop_btn.bind("<Button-1>", lambda e: self.on_nav_stop())
+
+        # CALIBRATE 버튼
+        cal_btn = tk.Canvas(btn_frame, width=80, height=24,
+                            bg=self.colors["bg"], highlightthickness=0)
+        cal_btn.pack(side="left")
+        cal_btn.create_rectangle(0, 0, 80, 24, fill=self.colors["blue"], outline=self.colors["gray"])
+        cal_btn.create_text(40, 12, text="CALIBRATE", fill=self.colors["white"], font=("Arial", 8, "bold"))
+        cal_btn.bind("<Button-1>", lambda e: self.on_nav_calibrate())
+
+        # 상태 라벨
+        self.nav_status_lbl = tk.Label(
+            nav_frame, text="대기 중", fg=self.colors["text_gray"],
+            bg=self.colors["bg"], font=("Arial", 8), anchor="w"
+        )
+        self.nav_status_lbl.pack(anchor="w", pady=(2, 0))
+
+        # Separator
+        tk.Frame(self.container, bg=self.colors["gray"], height=1).pack(fill="x", padx=30, pady=10)
+
+    def on_nav_go(self):
+        """GO 버튼 핸들러: 입력된 좌표로 이동 시작"""
+        try:
+            x = int(self.nav_x_entry.get().strip())
+            y = int(self.nav_y_entry.get().strip())
+            self.navigator.move_to(x, y)
+        except ValueError:
+            self.nav_status_lbl.config(text="⚠ 올바른 좌표를 입력하세요", fg=self.colors["red"])
+
+    def on_nav_stop(self):
+        """STOP 버튼 핸들러: 이동 중단"""
+        self.navigator.stop()
+
+    def on_nav_calibrate(self):
+        """CALIBRATE 버튼 핸들러: 타일↔픽셀 비율 자동 측정"""
+        self.navigator.calibrate()
+
     def update_bar(self, key, percent, text):
         self.info_labels[key].config(text=text)
         if key in self.cells:
@@ -259,6 +361,10 @@ class BauhausDashboard:
         coords_text = state.get("coords", "0, 0")
         direction_text = state.get("direction", "-")
         self.coords_lbl.config(text=f"LOCATION [ {coords_text} ]  {direction_text}")
+        
+        # 네비게이션 상태 업데이트
+        if hasattr(self, 'nav_status_lbl'):
+            self.nav_status_lbl.config(text=self.navigator.status)
         
         self.root.after(200, self.update_state_ui)
 
@@ -342,6 +448,7 @@ class BauhausDashboard:
         t.start()
 
     def quit_all(self):
+        self.navigator.stop()
         self.monitor.stop()
         for name, config in self.engines.items():
             if config["process"] is not None:
