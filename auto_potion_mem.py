@@ -6,7 +6,7 @@ import sys
 
 # --- 사용자 설정 ---
 TARGET_PROCESS = "LC.exe"
-HP_OFFSET = 0x143603c  # 검증된 내 캐릭터 HP 오프셋
+HP_OFFSET = 0x149b35c  # 검증된 내 캐릭터 HP 오프셋 (업데이트 반영)
 HP_THRESHOLD = 80      # 이 수치보다 HP가 낮아지면 물약을 먹습니다 (수동 변경 가능)
 POTION_KEY = 'f1'      # 물약 스킬/아이템이 등록된 단축키
 SCAN_INTERVAL = 0.1    # 체크 간격 (초)

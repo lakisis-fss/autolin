@@ -11,7 +11,7 @@ def verify_hp():
         base_address = module.lpBaseOfDll
         
         # 앞서 찾은 정적 오프셋
-        hp_offset = 0x143603c
+        hp_offset = 0x149b35c
         hp_address = base_address + hp_offset
         
         print(f"[*] 게임 베이스 주소: {hex(base_address)}")

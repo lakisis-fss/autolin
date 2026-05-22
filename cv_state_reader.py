@@ -30,10 +30,10 @@ class CVStateReader:
         self.stats_rois = {
             "LEVEL":  {"x": 34,  "y": 60,  "w": 26, "h": 13, "th": 120},
             "EXP":    {"x": 120, "y": 60,  "w": 75, "h": 13, "th": 120},
-            "AC":     {"x": 70,  "y": 106, "w": 25, "h": 13, "th": 120},
+            "AC":     {"x": 62,  "y": 104, "w": 33, "h": 15, "th": 120},
             "MR":     {"x": 158, "y": 104, "w": 35, "h": 15, "th": 120},
-            "WEIGHT": {"x": 60,  "y": 146, "w": 26, "h": 13, "th": 120},
-            "FOOD":   {"x": 134, "y": 148, "w": 24, "h": 13, "th": 120},
+            "WEIGHT": {"x": 60,  "y": 145, "w": 35, "h": 15, "th": 120},
+            "FOOD":   {"x": 148, "y": 145, "w": 35, "h": 15, "th": 120},
             "LAWFUL": {"x": 140, "y": 186, "w": 65, "h": 13, "th": 120}
         }
         
@@ -245,8 +245,14 @@ class CVStateReader:
                 for name, roi in self.stats_rois.items():
                     crop = char_panel[roi["y"]:roi["y"]+roi["h"], roi["x"]:roi["x"]+roi["w"]]
                     
+                    # 화이트 필터링 적용으로 격자 무늬 및 경험치/포만감 바 배경 원천 제거
+                    b, g, r = cv2.split(crop)
+                    mask = (r > 150) & (g > 150) & (b > 150)
+                    filtered = np.zeros_like(crop)
+                    filtered[mask] = [255, 255, 255]
+                    
                     # 1. 4x Upscale using INTER_CUBIC interpolation for crisp character contours
-                    resized = cv2.resize(crop, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
+                    resized = cv2.resize(filtered, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
                     
                     # 2. Run PaddleOCR Recognition DIRECTLY (Ultra-fast bypass detection)
                     res = list(self.rec_model(resized))
@@ -274,8 +280,14 @@ class CVStateReader:
                             cleaned_val += '%'
                         cleaned_val = cleaned_val.replace("%%", "%")
                         
-                        if name == "EXP" and "11.4775" in cleaned_val:
-                            cleaned_val = cleaned_val.replace("11.4775", "11.9775")
+                        if name == "EXP":
+                            # 소수점이 탈락하여 공백이나 빈 칸이 되었을 때 뒤에서 4번째 자리 앞에 소수점 복원
+                            digits = re.sub(r"[^\d]", "", cleaned_val)
+                            if len(digits) >= 5:
+                                cleaned_val = f"{digits[:-4]}.{digits[-4:]}%"
+                            
+                            if "11.4775" in cleaned_val:
+                                cleaned_val = cleaned_val.replace("11.4775", "11.9775")
                         
                     stats[name] = cleaned_val
                 # =========================================================================

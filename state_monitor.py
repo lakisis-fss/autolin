@@ -8,9 +8,16 @@ class StateMonitor:
         self.state = {
             "hp": {"percent": 0.0, "text": "0%"},
             "mp": {"percent": 0.0, "text": "0%"},
+            "mem_hp": {"percent": 0.0, "text": "0/0"},
+            "mem_mp": {"percent": 0.0, "text": "0/0"},
+            "mem_weight": {"percent": 0.0, "text": "0%"},
+            "mem_food": {"percent": 0.0, "text": "0%"},
             "weight": {"percent": 0.0, "text": "0%"},
             "level": "0",
             "exp": "0%",
+            "mem_level": "0",
+            "mem_exp_abs": "0",
+            "mem_exp_pct": "Calibrating...",
             "ac": "0",
             "mr": "0%",
             "food": "0%",
@@ -59,14 +66,42 @@ class StateMonitor:
                     self.state["food"] = mem_data.get("food", "0%")
                     self.state["lawful"] = mem_data.get("lawful", "0")
                 
-                # 2. 메모리에서 실시간 좌표 읽기
+                # 2. 메모리에서 실시간 좌표 및 HP/MP/LEVEL/EXP 읽기
                 coords_data = self.mem_reader.get_state()
                 if coords_data:
+                    # 실시간 메모리 경험치 캘리브레이션 트리거
+                    if mem_data and mem_data.get("exp"):
+                        self.mem_reader.update_exp_calibration(mem_data["exp"], coords_data["level"])
+                        
                     self.state["coords"] = coords_data.get("coords", "0, 0")
                     self.state["direction"] = coords_data.get("direction", "-")
+                    self.state["mem_hp"] = coords_data.get("hp", {"percent": 0.0, "text": "0/0"})
+                    self.state["mem_mp"] = coords_data.get("mp", {"percent": 0.0, "text": "0/0"})
+                    self.state["mem_weight"] = coords_data.get("weight", {"percent": 0.0, "text": "0%"})
+                    self.state["mem_food"] = coords_data.get("food", {"percent": 0.0, "text": "0%"})
+                    
+                    # 메모리 직접 리딩 정보 연동
+                    self.state["mem_level"] = str(coords_data["level"])
+                    self.state["mem_exp_abs"] = str(coords_data["exp_abs"])
+                    self.state["mem_exp_pct"] = coords_data["exp_pct_str"]
+                    
+                    # 메인 그리드의 경험치/레벨/무게/포만감도 메모리 정확 수치로 실시간 보정(백업)
+                    if coords_data["exp_pct_str"] != "Calibrating...":
+                        self.state["exp"] = coords_data["exp_pct_str"]
+                    self.state["level"] = str(coords_data["level"])
+                    self.state["weight"]["percent"] = coords_data["weight"]["percent"]
+                    self.state["weight"]["text"] = coords_data["weight"]["text"]
+                    self.state["food"] = coords_data["food"]["text"]
                 else:
                     self.state["coords"] = "0, 0"
                     self.state["direction"] = "-"
+                    self.state["mem_hp"] = {"percent": 0.0, "text": "0/0"}
+                    self.state["mem_mp"] = {"percent": 0.0, "text": "0/0"}
+                    self.state["mem_weight"] = {"percent": 0.0, "text": "0%"}
+                    self.state["mem_food"] = {"percent": 0.0, "text": "0%"}
+                    self.state["mem_level"] = "0"
+                    self.state["mem_exp_abs"] = "0"
+                    self.state["mem_exp_pct"] = "Calibrating..."
                     
                 self.state["map"] = "Scan..."
                 self.state["transform"] = "-"

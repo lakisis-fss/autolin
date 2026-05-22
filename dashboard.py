@@ -89,6 +89,13 @@ class BauhausDashboard:
         self.draw_toggle_icon()
         self.toggle_btn.bind("<Button-1>", lambda e: self.toggle_minimize())
 
+        # Exit Button (Geometric Circle on Top Right)
+        self.exit_btn = tk.Canvas(self.root, width=30, height=30, bg=self.colors["bg"], highlightthickness=0)
+        self.exit_btn.place(x=self.full_width - 35, y=5)
+        self.exit_btn.create_oval(5, 5, 25, 25, fill=self.colors["red"], outline=self.colors["gray"], width=1)
+        self.exit_btn.create_text(15, 15, text="X", fill=self.colors["white"], font=("Arial", 9, "bold"))
+        self.exit_btn.bind("<Button-1>", lambda e: self.quit_all())
+
         # Header (Grid Style)
         header_frame = tk.Frame(self.container, bg=self.colors["bg"], height=100)
         header_frame.pack(fill="x", pady=(20, 10))
@@ -102,23 +109,25 @@ class BauhausDashboard:
         self.coords_lbl = tk.Label(header_frame, text="LOCATION [ 0, 0 ]", fg=self.colors["yellow"], bg=self.colors["bg"], font=("Arial", 10, "bold"))
         self.coords_lbl.pack(anchor="w", padx=30, pady=(4, 0))
         
+        # 메모리 직접 리딩 HP/MP 텔레메트리 (Off White 색상으로 바우하우스 미니멀룩 완성)
+        self.mem_lbl = tk.Label(header_frame, text="MEMORY HP [ 0/0 ]  MP [ 0/0 ]", fg=self.colors["white"], bg=self.colors["bg"], font=("Arial", 10, "bold"))
+        self.mem_lbl.pack(anchor="w", padx=30, pady=(4, 0))
+        
+        # 메모리 직접 리딩 LV/EXP/WT 텔레메트리 (Bauhaus Yellow 색상으로 사이버네틱 텔레메트리 룩 선사, 2줄 구성)
+        self.mem_stats_lbl = tk.Label(header_frame, text="MEMORY LV [ 0 ]  EXP [ Calibrating... ]\nMEMORY WT [ 0% ]  FD [ 0% ]", fg=self.colors["yellow"], bg=self.colors["bg"], font=("Arial", 10, "bold"), justify="left")
+        self.mem_stats_lbl.pack(anchor="w", padx=30, pady=(4, 0))
+        
         # Grid/Separator
         tk.Frame(self.container, bg=self.colors["gray"], height=2).pack(fill="x", padx=30, pady=20)
         
         self.create_state_section()
         self.create_navigation_section()
+        self.create_heal_test_section()
         
         # Engine Control Items
         for name, config in self.engines.items():
             self.create_engine_row(name, config)
             
-        # Exit Button (Geometric Circle)
-        exit_canvas = tk.Canvas(self.container, width=60, height=60, bg=self.colors["bg"], highlightthickness=0)
-        exit_canvas.pack(side="bottom", pady=40)
-        exit_canvas.create_oval(5, 5, 55, 55, fill=self.colors["red"], outline=self.colors["gray"], width=2)
-        exit_canvas.bind("<Button-1>", lambda e: self.quit_all())
-        tk.Label(self.container, text="CLOSE ALL", fg=self.colors["white"], bg=self.colors["bg"], font=sub_font).pack(side="bottom")
-        
         self.root.after(100, self.update_state_ui)
 
     def start_drag(self, event):
@@ -154,12 +163,14 @@ class BauhausDashboard:
             new_x = curr_x + self.full_width - self.min_width
             self.root.geometry(f"{self.min_width}x{self.height}+{new_x}+{curr_y}")
             self.container.pack_forget()
+            self.exit_btn.place_forget()
             self.is_minimized = True
         else:
             # Expand and return to original floating width
             new_x = curr_x - self.full_width + self.min_width
             self.root.geometry(f"{self.full_width}x{self.height}+{new_x}+{curr_y}")
             self.container.pack(fill="both", expand=True)
+            self.exit_btn.place(x=self.full_width - 35, y=5)
             self.is_minimized = False
         self.draw_toggle_icon()
 
@@ -323,6 +334,52 @@ class BauhausDashboard:
         """CALIBRATE 버튼 핸들러: 타일↔픽셀 비율 자동 측정"""
         self.navigator.calibrate()
 
+    def create_heal_test_section(self):
+        """힐 스킬 자동 시전 테스트 UI 섹션 (Bauhaus 스타일)"""
+        heal_frame = tk.Frame(self.container, bg=self.colors["bg"], padx=30)
+        heal_frame.pack(fill="x", pady=(5, 5))
+
+        # Section header
+        tk.Label(heal_frame, text="HEAL CAST TEST", fg=self.colors["yellow"],
+                 bg=self.colors["bg"], font=("Arial", 10, "bold")).pack(anchor="w")
+
+        # ── 버튼 행 ──
+        btn_frame = tk.Frame(heal_frame, bg=self.colors["bg"])
+        btn_frame.pack(fill="x", pady=(5, 5))
+
+        # CAST HEAL 버튼
+        cast_btn = tk.Canvas(btn_frame, width=120, height=28,
+                             bg=self.colors["bg"], highlightthickness=0)
+        cast_btn.pack(side="left", padx=(0, 10))
+        cast_btn.create_rectangle(0, 0, 120, 28, fill=self.colors["blue"], outline=self.colors["gray"])
+        cast_btn.create_text(60, 14, text="CAST HEAL", fill=self.colors["white"], font=("Arial", 9, "bold"))
+        cast_btn.bind("<Button-1>", lambda e: self.on_cast_heal())
+
+        # 상태 라벨
+        self.heal_status_lbl = tk.Label(
+            heal_frame, text="대기 중", fg=self.colors["text_gray"],
+            bg=self.colors["bg"], font=("Arial", 8), anchor="w"
+        )
+        self.heal_status_lbl.pack(anchor="w", pady=(2, 0))
+
+        # Separator
+        tk.Frame(self.container, bg=self.colors["gray"], height=1).pack(fill="x", padx=30, pady=10)
+
+    def on_cast_heal(self):
+        """힐 시전 테스트 비동기 실행"""
+        from heal_caster import HealCaster
+        
+        def _run():
+            self.heal_status_lbl.config(text="🔮 힐 매칭 및 시전 중...", fg=self.colors["yellow"])
+            caster = HealCaster(debug=True)
+            success, msg = caster.cast_heal()
+            if success:
+                self.heal_status_lbl.config(text=f"✅ {msg}", fg="#2D7D46")
+            else:
+                self.heal_status_lbl.config(text=f"❌ {msg}", fg=self.colors["red"])
+                
+        threading.Thread(target=_run, daemon=True).start()
+
     def update_bar(self, key, percent, text):
         self.info_labels[key].config(text=text)
         if key in self.cells:
@@ -361,6 +418,22 @@ class BauhausDashboard:
         coords_text = state.get("coords", "0, 0")
         direction_text = state.get("direction", "-")
         self.coords_lbl.config(text=f"LOCATION [ {coords_text} ]  {direction_text}")
+        
+        # 메모리 직접 리딩 HP/MP/레벨/경험치/무게 실시간 업데이트
+        mem_hp = state.get("mem_hp", {})
+        mem_mp = state.get("mem_mp", {})
+        mem_weight = state.get("mem_weight", {})
+        mem_food = state.get("mem_food", {})
+        mem_level = state.get("mem_level", "0")
+        mem_exp_pct = state.get("mem_exp_pct", "Calibrating...")
+        
+        mem_hp_text = mem_hp.get("text", "0/0")
+        mem_mp_text = mem_mp.get("text", "0/0")
+        mem_weight_text = mem_weight.get("text", "0%")
+        mem_food_text = mem_food.get("text", "0%")
+        
+        self.mem_lbl.config(text=f"MEMORY HP [ {mem_hp_text} ]  MP [ {mem_mp_text} ]")
+        self.mem_stats_lbl.config(text=f"MEMORY LV [ {mem_level} ]  EXP [ {mem_exp_pct} ]\nMEMORY WT [ {mem_weight_text} ]  FD [ {mem_food_text} ]")
         
         # 네비게이션 상태 업데이트
         if hasattr(self, 'nav_status_lbl'):
