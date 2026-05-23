@@ -24,6 +24,15 @@ class MemStateReader:
         }
         self.last_attach_attempt = 0
         
+        # 골든 포인터 체인 자동 자가치유용 오프셋 및 상태 초기화
+        self.weight_chain = {
+            "lvl1_off": 0x710,
+            "lvl2_off": 0xb28,
+            "lvl3_wt_off": 0x1474,
+            "lvl3_fd_off": 0x14f4
+        }
+        self.last_heal_attempt = 0
+        
         # 하이브리드 경험치 캘리브레이션 상태 정보
         self.exp_ratio = 1.4123283281076878e-05  # 레벨 14 진짜 정밀 경험치 배율 프리셋 (62.3190% / 4412501)
         self.calibrated_level = 14
@@ -85,6 +94,55 @@ class MemStateReader:
         except Exception as e:
             print(f"[MemStateReader] Calibration error: {e}")
 
+    def heal_weight_chain(self, target_weight=35):
+        """힙 재할당 시 실시간 무게와 포만감을 탐색하여 체인 오프셋을 자동 복구하는 자가치유 로직"""
+        if not self.pm:
+            return False
+        try:
+            char_base = self.base_address + 0x149b350
+            lvl1 = self.pm.read_longlong(char_base + 0xb0)
+            if lvl1 <= 0:
+                return False
+                
+            lvl2_addr = self.pm.read_longlong(lvl1 + self.weight_chain["lvl1_off"])
+            if lvl2_addr <= 0:
+                return False
+                
+            if target_weight < 0 or target_weight > 100:
+                target_weight = 35
+                
+            # 0.05초 대역 고속 탐색
+            for off2 in range(0, 0x1800, 8):
+                try:
+                    lvl3_addr = self.pm.read_longlong(lvl2_addr + off2)
+                    if not (0x10000000000 < lvl3_addr < 0x7ffffffffff):
+                        continue
+                    for off3 in range(0, 0x3000, 4):
+                        try:
+                            w_val = self.pm.read_int(lvl3_addr + off3)
+                            if w_val == target_weight:
+                                # 무게 발견 시 주변 ±256 바이트 이내에서 포만감(500~990) 탐색
+                                for near_off in range(off3 - 256, off3 + 256, 4):
+                                    if near_off < 0 or near_off >= 0x3000 or near_off == off3:
+                                        continue
+                                    try:
+                                        f_val = self.pm.read_int(lvl3_addr + near_off)
+                                        if 500 <= f_val <= 990:
+                                            self.weight_chain["lvl2_off"] = off2
+                                            self.weight_chain["lvl3_wt_off"] = off3
+                                            self.weight_chain["lvl3_fd_off"] = near_off
+                                            print(f"[MemStateReader] [Self-Healing] Updated offsets: lvl2+{hex(off2)} -> lvl3+{hex(off3)}(Wt) / {hex(near_off)}(Fd:{f_val})")
+                                            return True
+                                    except Exception:
+                                        pass
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"[MemStateReader] [Self-Healing] Error: {e}")
+        return False
+
     def get_state(self):
         if not self.pm:
             if not self.attach():
@@ -95,12 +153,33 @@ class MemStateReader:
             max_hp = self.pm.read_int(self.base_address + self.offsets["max_hp"])
             mp = self.pm.read_int(self.base_address + self.offsets["mp"])
             max_mp = self.pm.read_int(self.base_address + self.offsets["max_mp"])
-            # 실시간 정적 전역 변수 오프셋을 통한 weight 및 food 리딩 (검증된 정적 매핑 복원)
+            # 실시간 동적 포인터 체인을 통한 weight 및 food 리딩 (자가치유 활성화)
             weight = 0
             food = 0
             try:
-                weight = self.pm.read_int(self.base_address + self.offsets["weight"])
-                food = self.pm.read_int(self.base_address + self.offsets["food"])
+                char_base = self.base_address + 0x149b350
+                lvl1 = self.pm.read_longlong(char_base + 0xb0)
+                if lvl1 > 0:
+                    lvl2 = self.pm.read_longlong(lvl1 + self.weight_chain["lvl1_off"])
+                    if lvl2 > 0:
+                        lvl3 = self.pm.read_longlong(lvl2 + self.weight_chain["lvl2_off"])
+                        if lvl3 > 0:
+                            weight = self.pm.read_int(lvl3 + self.weight_chain["lvl3_wt_off"])
+                            food = self.pm.read_int(lvl3 + self.weight_chain["lvl3_fd_off"])
+                            
+                # 리딩 실패 혹은 힙 재할당으로 깨진 경우 자가치유 가동
+                if weight <= 0 or food <= 0 or weight > 100 or food > 1000:
+                    current_time = time.time()
+                    if current_time - self.last_heal_attempt > 3: # 3초 쿨타임
+                        self.last_heal_attempt = current_time
+                        self.heal_weight_chain(target_weight=35)
+                        # 자가치유 완료 후 재차 읽기
+                        lvl2 = self.pm.read_longlong(lvl1 + self.weight_chain["lvl1_off"])
+                        if lvl2 > 0:
+                            lvl3 = self.pm.read_longlong(lvl2 + self.weight_chain["lvl2_off"])
+                            if lvl3 > 0:
+                                weight = self.pm.read_int(lvl3 + self.weight_chain["lvl3_wt_off"])
+                                food = self.pm.read_int(lvl3 + self.weight_chain["lvl3_fd_off"])
             except Exception:
                 pass
             level = self.pm.read_int(self.base_address + self.offsets["level"])
@@ -162,7 +241,7 @@ class MemStateReader:
                 "hp": {"percent": hp_pct, "text": f"{hp}/{max_hp}"},
                 "mp": {"percent": mp_pct, "text": f"{mp}/{max_mp}"},
                 "weight": {"percent": weight_pct, "text": f"{weight}%"},
-                "food": {"percent": float(food), "text": f"{food}%"},
+                "food": {"percent": food / 10.0, "text": f"{int(food / 10.0)}%"},
                 "coords": f"{pos_x}, {pos_y}",
                 "direction": direction_str,
                 "level": level,
