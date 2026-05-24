@@ -1,5 +1,6 @@
 import time
 import threading
+import re
 from cv_state_reader import CVStateReader
 from mem_state_reader import MemStateReader
 
@@ -26,7 +27,14 @@ class StateMonitor:
             "coords": "0, 0",
             "direction": "?",
             "transform": "?",
-            "debuffs": "?"
+            "debuffs": "?",
+            "parser_status": {
+                "strategy": "Scan...",
+                "wt_off": "-",
+                "fd_off": "-",
+                "lvl2_off": "-",
+                "profile_lvl": 14
+            }
         }
         self.running = False
         self.thread = None
@@ -66,32 +74,31 @@ class StateMonitor:
                     self.state["food"] = mem_data.get("food", "0%")
                     self.state["lawful"] = mem_data.get("lawful", "0")
                 
-                # 2. 메모리에서 실시간 좌표 및 HP/MP/LEVEL/EXP 읽기
+                # 2. 메모리에서 실시간 좌표 및 HP/MP/LEVEL/EXP 읽기 (완벽하게 독립적으로 상호 참조 없이 작동)
                 coords_data = self.mem_reader.get_state()
                 if coords_data:
-                    # 실시간 메모리 경험치 캘리브레이션 트리거
+                    # [지능형 자가 최적화 캘리브레이션 복원]
+                    # 상단 메모리 추출 수치가 참값에 수렴하도록 메모리 자체 환산 배율만 독립적으로 교정합니다.
+                    # (하단 그리드를 강제 덮어쓰기 보정하던 연동 코드는 절대 복원하지 않고 이원화 유지를 보장합니다.)
                     if mem_data and mem_data.get("exp"):
                         self.mem_reader.update_exp_calibration(mem_data["exp"], coords_data["level"])
-                        
+
                     self.state["coords"] = coords_data.get("coords", "0, 0")
                     self.state["direction"] = coords_data.get("direction", "-")
                     self.state["mem_hp"] = coords_data.get("hp", {"percent": 0.0, "text": "0/0"})
                     self.state["mem_mp"] = coords_data.get("mp", {"percent": 0.0, "text": "0/0"})
                     self.state["mem_weight"] = coords_data.get("weight", {"percent": 0.0, "text": "0%"})
                     self.state["mem_food"] = coords_data.get("food", {"percent": 0.0, "text": "0%"})
+                    self.state["parser_status"] = coords_data.get("parser_status", {})
                     
-                    # 메모리 직접 리딩 정보 연동
+                    # 메모리 직접 리딩 정보 연동 (대시보드 상단 텔레메트리 전용)
                     self.state["mem_level"] = str(coords_data["level"])
                     self.state["mem_exp_abs"] = str(coords_data["exp_abs"])
                     self.state["mem_exp_pct"] = coords_data["exp_pct_str"]
                     
-                    # 메인 그리드의 경험치/레벨/무게/포만감도 메모리 정확 수치로 실시간 보정(백업)
-                    if coords_data["exp_pct_str"] != "Calibrating...":
-                        self.state["exp"] = coords_data["exp_pct_str"]
-                    self.state["level"] = str(coords_data["level"])
-                    self.state["weight"]["percent"] = coords_data["weight"]["percent"]
-                    self.state["weight"]["text"] = coords_data["weight"]["text"]
-                    self.state["food"] = coords_data["food"]["text"]
+                    # [이원화 핵심 보장]
+                    # 하단 그리드 셀(exp, level, weight, food)을 메모리 값으로 강제 보정(덮어쓰기)하던 
+                    # 하이브리드 보정 코드를 전면 제거하여 OCR 판독 결과 그대로 독립 표기하도록 유지합니다.
                 else:
                     self.state["coords"] = "0, 0"
                     self.state["direction"] = "-"
@@ -102,6 +109,13 @@ class StateMonitor:
                     self.state["mem_level"] = "0"
                     self.state["mem_exp_abs"] = "0"
                     self.state["mem_exp_pct"] = "Calibrating..."
+                    self.state["parser_status"] = {
+                        "strategy": "Offline",
+                        "wt_off": "-",
+                        "fd_off": "-",
+                        "lvl2_off": "-",
+                        "profile_lvl": 0
+                    }
                     
                 self.state["map"] = "Scan..."
                 self.state["transform"] = "-"

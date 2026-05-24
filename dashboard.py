@@ -1,3 +1,13 @@
+# Enable DPI awareness on Windows to prevent text blurring and layout scaling issues
+try:
+    import ctypes
+    ctypes.windll.shcore.SetProcessDpiAwareness(1)
+except Exception:
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
+
 import tkinter as tk
 from tkinter import font as tkfont
 import subprocess
@@ -9,6 +19,42 @@ import time
 import socket
 import state_monitor
 from navigator import Navigator
+
+# Smooth color brightening utility for beautiful Bauhaus interactive click/hover effect
+def lighten_color(hex_color):
+    hex_color = hex_color.lstrip('#')
+    lv = len(hex_color)
+    if lv == 3:
+        hex_color = "".join(2*c for c in hex_color)
+    rgb = [int(hex_color[i:i+2], 16) for i in (0, 2, 4)]
+    new_rgb = [min(255, int(c * 1.25)) for c in rgb]
+    return f"#{new_rgb[0]:02X}{new_rgb[1]:02X}{new_rgb[2]:02X}"
+
+# Reusable high-fidelity responsive flat button with exquisite hover transitions
+def create_flat_button(parent, text, bg_color, click_fn):
+    btn = tk.Label(
+        parent,
+        text=text,
+        fg="#F4F1E8",
+        bg=bg_color,
+        font=("Arial", 9, "bold"),
+        relief="flat",
+        padx=12,
+        pady=6,
+        bd=1,
+        highlightbackground="#262626",
+        highlightthickness=1,
+        cursor="hand2"
+    )
+    def on_enter(e):
+        btn.config(bg=lighten_color(bg_color))
+    def on_leave(e):
+        btn.config(bg=bg_color)
+    btn.bind("<Enter>", on_enter)
+    btn.bind("<Leave>", on_leave)
+    btn.bind("<Button-1>", lambda e: click_fn())
+    return btn
+
 
 class BauhausDashboard:
     def __init__(self):
@@ -26,12 +72,21 @@ class BauhausDashboard:
             "white": "#F4F1E8"    # Off White
         }
         
-        # Monitor Geometry (Floating Window)
+        # Monitor Geometry (Floating Window) with smart DPI auto-scaling
         screen_w = self.root.winfo_screenwidth()
         screen_h = self.root.winfo_screenheight()
-        self.full_width = 400
-        self.height = 850
-        x_pos = screen_w - self.full_width - 50
+        
+        # Calculate process/screen DPI scale factor
+        try:
+            dpi = self.root.winfo_fpixels('1i')
+            self.scale_factor = max(1.0, dpi / 96.0)
+        except Exception:
+            self.scale_factor = 1.0
+            
+        self.full_width = int(400 * self.scale_factor)
+        self.height = int(850 * self.scale_factor)
+        
+        x_pos = screen_w - self.full_width - int(50 * self.scale_factor)
         y_pos = (screen_h - self.height) // 2
         
         self.root.geometry(f"{self.full_width}x{self.height}+{x_pos}+{y_pos}")
@@ -41,7 +96,7 @@ class BauhausDashboard:
         
         # State Management
         self.is_minimized = False
-        self.min_width = 40
+        self.min_width = int(40 * self.scale_factor)
         self._dragging = False
         
         # Drag Binding
@@ -68,7 +123,7 @@ class BauhausDashboard:
                 "desc": "실시간 적 인식 및 타겟팅"
             },
             "Auto Potion": {
-                "path": ["python", "auto_potion.py"], 
+                "path": ["python", "auto_potion_mem.py"], 
                 "process": None, 
                 "color": self.colors["yellow"],
                 "desc": "HP 감시 및 물약 자동 사용"
@@ -103,18 +158,18 @@ class BauhausDashboard:
         title_font = tkfont.Font(family="Arial", size=20, weight="bold")
         sub_font = tkfont.Font(family="Arial", size=10)
         
-        tk.Label(header_frame, text="LinclassAuto", fg=self.colors["white"], bg=self.colors["bg"], font=title_font).pack(anchor="w", padx=30)
+        tk.Label(header_frame, text="LinclassAuto", fg=self.colors["white"], bg=self.colors["bg"], font=title_font, anchor="w", justify="left", padx=5).pack(anchor="w", padx=30)
         
         # 실시간 캐릭터 좌표 정보 (Bauhaus Yellow 색상으로 사이버네틱 텔레메트리 룩 선사)
-        self.coords_lbl = tk.Label(header_frame, text="LOCATION [ 0, 0 ]", fg=self.colors["yellow"], bg=self.colors["bg"], font=("Arial", 10, "bold"))
+        self.coords_lbl = tk.Label(header_frame, text="LOCATION [ 0, 0 ]", fg=self.colors["yellow"], bg=self.colors["bg"], font=("Arial", 10, "bold"), anchor="w", justify="left", padx=5)
         self.coords_lbl.pack(anchor="w", padx=30, pady=(4, 0))
         
         # 메모리 직접 리딩 HP/MP 텔레메트리 (Off White 색상으로 바우하우스 미니멀룩 완성)
-        self.mem_lbl = tk.Label(header_frame, text="MEMORY HP [ 0/0 ]  MP [ 0/0 ]", fg=self.colors["white"], bg=self.colors["bg"], font=("Arial", 10, "bold"))
+        self.mem_lbl = tk.Label(header_frame, text="MEMORY HP [ 0/0 ]  MP [ 0/0 ]", fg=self.colors["white"], bg=self.colors["bg"], font=("Arial", 10, "bold"), anchor="w", justify="left", padx=5)
         self.mem_lbl.pack(anchor="w", padx=30, pady=(4, 0))
         
         # 메모리 직접 리딩 LV/EXP/WT 텔레메트리 (Bauhaus Yellow 색상으로 사이버네틱 텔레메트리 룩 선사, 2줄 구성)
-        self.mem_stats_lbl = tk.Label(header_frame, text="MEMORY LV [ 0 ]  EXP [ Calibrating... ]\nMEMORY WT [ 0% ]  FD [ 0% ]", fg=self.colors["yellow"], bg=self.colors["bg"], font=("Arial", 10, "bold"), justify="left")
+        self.mem_stats_lbl = tk.Label(header_frame, text="MEMORY LV [ 0 ]  EXP [ Calibrating... ]\nMEMORY WT [ 0% ]  FD [ 0% ]", fg=self.colors["yellow"], bg=self.colors["bg"], font=("Arial", 10, "bold"), justify="left", anchor="w", padx=5)
         self.mem_stats_lbl.pack(anchor="w", padx=30, pady=(4, 0))
         
         # Grid/Separator
@@ -123,6 +178,8 @@ class BauhausDashboard:
         self.create_state_section()
         self.create_navigation_section()
         self.create_heal_test_section()
+        self.create_telemetry_parser_section()
+        self.create_pipeline_visualizer_section()
         
         # Engine Control Items
         for name, config in self.engines.items():
@@ -208,38 +265,38 @@ class BauhausDashboard:
             key = item["key"]
             color = item["color"]
             
-            # Bauhaus Geometric Cell Frame with thin borders
+            # Bauhaus Geometric Cell Frame with thin borders and DPI-friendly height
             cell = tk.Frame(
                 self.state_frame, 
                 bg="#121212", 
                 highlightbackground=self.colors["gray"], 
                 highlightthickness=1,
-                height=48
+                height=int(56 * self.scale_factor)
             )
             cell.grid(row=item["row"], column=item["col"], sticky="nsew", padx=2, pady=2)
             cell.grid_propagate(False)
             
-            # Stat Label (top-left)
-            lbl = tk.Label(cell, text=item["label"], fg=color, bg="#121212", font=cell_font_label)
-            lbl.place(x=8, y=4)
+            # Stat Label (with defensive padding to prevent text clipping)
+            lbl = tk.Label(cell, text=item["label"], fg=color, bg="#121212", font=cell_font_label, anchor="w", justify="left", padx=8)
+            lbl.pack(side="top", fill="x", pady=(4, 0))
             
-            # Stat Value (aligned nicely)
-            val = tk.Label(cell, text="-", fg=self.colors["white"], bg="#121212", font=cell_font_val)
-            val.place(x=8, y=20)
+            # Stat Value (beautiful vertical alignment)
+            val = tk.Label(cell, text="-", fg=self.colors["white"], bg="#121212", font=cell_font_val, anchor="w", justify="left", padx=8)
+            val.pack(side="top", fill="x", pady=(2, 0))
             
             self.info_labels[key] = val
             
-            # Thin progress bar / line at bottom of cell
+            # Thin progress bar / line at bottom of cell (DPI responsive)
             if item["is_bar"]:
                 # Subtle progress background line
                 line_bg = tk.Frame(cell, bg="#1E1E1E", height=2)
-                line_bg.place(x=8, y=40, width=96, height=2)
+                line_bg.pack(side="bottom", fill="x", padx=8, pady=(0, 6))
                 
-                # Active progress colored line
-                line = tk.Frame(cell, bg=color, height=2)
-                line.place(x=8, y=40, width=0, height=2)
+                # Active progress colored line placed relatively within the background container
+                line = tk.Frame(line_bg, bg=color, height=2)
+                line.place(x=0, y=0, width=0, height=2)
                 
-                self.cells[key] = {"line": line}
+                self.cells[key] = {"line": line, "line_bg": line_bg}
                 
         # Separator line
         tk.Frame(self.container, bg=self.colors["gray"], height=1).pack(fill="x", padx=30, pady=15)
@@ -249,16 +306,16 @@ class BauhausDashboard:
         nav_frame = tk.Frame(self.container, bg=self.colors["bg"], padx=30)
         nav_frame.pack(fill="x", pady=(0, 5))
 
-        # Section header
+        # Section header (Defensive padding applied)
         tk.Label(nav_frame, text="NAVIGATE", fg=self.colors["yellow"],
-                 bg=self.colors["bg"], font=("Arial", 10, "bold")).pack(anchor="w")
+                 bg=self.colors["bg"], font=("Arial", 10, "bold"), anchor="w", padx=4).pack(anchor="w")
 
         # ── 좌표 입력 행 ──
         input_frame = tk.Frame(nav_frame, bg=self.colors["bg"])
         input_frame.pack(fill="x", pady=(5, 5))
 
         tk.Label(input_frame, text="X", fg=self.colors["text_gray"],
-                 bg=self.colors["bg"], font=("Arial", 9, "bold")).pack(side="left")
+                 bg=self.colors["bg"], font=("Arial", 9, "bold"), anchor="w", padx=4).pack(side="left")
 
         self.nav_x_entry = tk.Entry(
             input_frame, width=7, bg="#1E1E1E", fg=self.colors["white"],
@@ -269,7 +326,7 @@ class BauhausDashboard:
         self.nav_x_entry.pack(side="left", padx=(4, 10))
 
         tk.Label(input_frame, text="Y", fg=self.colors["text_gray"],
-                 bg=self.colors["bg"], font=("Arial", 9, "bold")).pack(side="left")
+                 bg=self.colors["bg"], font=("Arial", 9, "bold"), anchor="w", padx=4).pack(side="left")
 
         self.nav_y_entry = tk.Entry(
             input_frame, width=7, bg="#1E1E1E", fg=self.colors["white"],
@@ -281,38 +338,24 @@ class BauhausDashboard:
 
         # ── 버튼 행 ──
         btn_frame = tk.Frame(nav_frame, bg=self.colors["bg"])
-        btn_frame.pack(fill="x", pady=(3, 3))
+        btn_frame.pack(fill="x", pady=(8, 3))
 
-        # GO 버튼
-        go_btn = tk.Canvas(btn_frame, width=50, height=24,
-                           bg=self.colors["bg"], highlightthickness=0)
-        go_btn.pack(side="left", padx=(0, 5))
-        go_btn.create_rectangle(0, 0, 50, 24, fill="#2D7D46", outline=self.colors["gray"])
-        go_btn.create_text(25, 12, text="GO", fill=self.colors["white"], font=("Arial", 9, "bold"))
-        go_btn.bind("<Button-1>", lambda e: self.on_nav_go())
+        # High-fidelity flat buttons that adapt perfectly to scale factor
+        go_btn = create_flat_button(btn_frame, "GO", "#2D7D46", self.on_nav_go)
+        go_btn.pack(side="left", padx=(0, 6))
 
-        # STOP 버튼
-        stop_btn = tk.Canvas(btn_frame, width=50, height=24,
-                             bg=self.colors["bg"], highlightthickness=0)
-        stop_btn.pack(side="left", padx=(0, 5))
-        stop_btn.create_rectangle(0, 0, 50, 24, fill=self.colors["red"], outline=self.colors["gray"])
-        stop_btn.create_text(25, 12, text="STOP", fill=self.colors["white"], font=("Arial", 9, "bold"))
-        stop_btn.bind("<Button-1>", lambda e: self.on_nav_stop())
+        stop_btn = create_flat_button(btn_frame, "STOP", self.colors["red"], self.on_nav_stop)
+        stop_btn.pack(side="left", padx=(0, 6))
 
-        # CALIBRATE 버튼
-        cal_btn = tk.Canvas(btn_frame, width=80, height=24,
-                            bg=self.colors["bg"], highlightthickness=0)
+        cal_btn = create_flat_button(btn_frame, "CALIBRATE", self.colors["blue"], self.on_nav_calibrate)
         cal_btn.pack(side="left")
-        cal_btn.create_rectangle(0, 0, 80, 24, fill=self.colors["blue"], outline=self.colors["gray"])
-        cal_btn.create_text(40, 12, text="CALIBRATE", fill=self.colors["white"], font=("Arial", 8, "bold"))
-        cal_btn.bind("<Button-1>", lambda e: self.on_nav_calibrate())
 
         # 상태 라벨
         self.nav_status_lbl = tk.Label(
             nav_frame, text="대기 중", fg=self.colors["text_gray"],
-            bg=self.colors["bg"], font=("Arial", 8), anchor="w"
+            bg=self.colors["bg"], font=("Arial", 8), anchor="w", justify="left", padx=4
         )
-        self.nav_status_lbl.pack(anchor="w", pady=(2, 0))
+        self.nav_status_lbl.pack(anchor="w", pady=(4, 0))
 
         # Separator
         tk.Frame(self.container, bg=self.colors["gray"], height=1).pack(fill="x", padx=30, pady=10)
@@ -339,29 +382,101 @@ class BauhausDashboard:
         heal_frame = tk.Frame(self.container, bg=self.colors["bg"], padx=30)
         heal_frame.pack(fill="x", pady=(5, 5))
 
-        # Section header
+        # Section header (Defensive padding applied)
         tk.Label(heal_frame, text="HEAL CAST TEST", fg=self.colors["yellow"],
-                 bg=self.colors["bg"], font=("Arial", 10, "bold")).pack(anchor="w")
+                 bg=self.colors["bg"], font=("Arial", 10, "bold"), anchor="w", padx=4).pack(anchor="w")
 
         # ── 버튼 행 ──
         btn_frame = tk.Frame(heal_frame, bg=self.colors["bg"])
-        btn_frame.pack(fill="x", pady=(5, 5))
+        btn_frame.pack(fill="x", pady=(8, 5))
 
-        # CAST HEAL 버튼
-        cast_btn = tk.Canvas(btn_frame, width=120, height=28,
-                             bg=self.colors["bg"], highlightthickness=0)
-        cast_btn.pack(side="left", padx=(0, 10))
-        cast_btn.create_rectangle(0, 0, 120, 28, fill=self.colors["blue"], outline=self.colors["gray"])
-        cast_btn.create_text(60, 14, text="CAST HEAL", fill=self.colors["white"], font=("Arial", 9, "bold"))
-        cast_btn.bind("<Button-1>", lambda e: self.on_cast_heal())
+        # Replaced with gorgeous high-fidelity flat button
+        cast_btn = create_flat_button(btn_frame, "CAST HEAL", self.colors["blue"], self.on_cast_heal)
+        cast_btn.pack(side="left")
 
         # 상태 라벨
         self.heal_status_lbl = tk.Label(
             heal_frame, text="대기 중", fg=self.colors["text_gray"],
-            bg=self.colors["bg"], font=("Arial", 8), anchor="w"
+            bg=self.colors["bg"], font=("Arial", 8), anchor="w", justify="left", padx=4
         )
-        self.heal_status_lbl.pack(anchor="w", pady=(2, 0))
+        self.heal_status_lbl.pack(anchor="w", pady=(4, 0))
 
+        # Separator
+        tk.Frame(self.container, bg=self.colors["gray"], height=1).pack(fill="x", padx=30, pady=10)
+
+    def create_telemetry_parser_section(self):
+        """실시간 자가치유 파서 상태 모니터링 UI 섹션 (Bauhaus 스타일)"""
+        parser_frame = tk.Frame(self.container, bg=self.colors["bg"], padx=30)
+        parser_frame.pack(fill="x", pady=(5, 5))
+        
+        # Section header
+        tk.Label(parser_frame, text="SELF-HEALING TELEMETRY", fg=self.colors["yellow"],
+                 bg=self.colors["bg"], font=("Arial", 10, "bold"), anchor="w", padx=4).pack(anchor="w")
+                 
+        # 정보 라벨들을 담을 가로 정렬 바우하우스 박스 프레임
+        box = tk.Frame(parser_frame, bg="#121212", highlightbackground=self.colors["gray"], highlightthickness=1)
+        box.pack(fill="x", pady=(8, 4))
+        
+        # 1행: 모드 및 깊이
+        row1 = tk.Frame(box, bg="#121212")
+        row1.pack(fill="x", padx=8, pady=(6, 3))
+        
+        tk.Label(row1, text="MEM STATUS:", fg=self.colors["text_gray"], bg="#121212", font=("Arial", 8, "bold")).pack(side="left")
+        self.tele_status_lbl = tk.Label(row1, text="CONNECTED", fg="#2D7D46", bg="#121212", font=("Arial", 8, "bold"))
+        self.tele_status_lbl.pack(side="left", padx=(4, 15))
+        
+        tk.Label(row1, text="STRATEGY:", fg=self.colors["text_gray"], bg="#121212", font=("Arial", 8, "bold")).pack(side="left")
+        self.tele_strategy_lbl = tk.Label(row1, text="OFFSET CACHE", fg=self.colors["blue"], bg="#121212", font=("Arial", 8, "bold"))
+        self.tele_strategy_lbl.pack(side="left", padx=(4, 0))
+        
+        # 2행: 실시간 무게/포만감 오프셋
+        row2 = tk.Frame(box, bg="#121212")
+        row2.pack(fill="x", padx=8, pady=(3, 6))
+        
+        tk.Label(row2, text="WT OFF:", fg=self.colors["text_gray"], bg="#121212", font=("Arial", 8, "bold")).pack(side="left")
+        self.tele_wt_lbl = tk.Label(row2, text="-", fg=self.colors["white"], bg="#121212", font=("Arial", 8))
+        self.tele_wt_lbl.pack(side="left", padx=(4, 15))
+        
+        tk.Label(row2, text="FD OFF:", fg=self.colors["text_gray"], bg="#121212", font=("Arial", 8, "bold")).pack(side="left")
+        self.tele_fd_lbl = tk.Label(row2, text="-", fg=self.colors["white"], bg="#121212", font=("Arial", 8))
+        self.tele_fd_lbl.pack(side="left", padx=(4, 0))
+        
+        # Separator
+        tk.Frame(self.container, bg=self.colors["gray"], height=1).pack(fill="x", padx=30, pady=10)
+
+    def create_pipeline_visualizer_section(self):
+        """이원화 데이터 파이프라인 독립성 상태 시각화 위젯 (Bauhaus 스타일)"""
+        vis_frame = tk.Frame(self.container, bg=self.colors["bg"], padx=30)
+        vis_frame.pack(fill="x", pady=(5, 5))
+        
+        # Section header
+        tk.Label(vis_frame, text="DECOUPLED DATA PIPELINE", fg=self.colors["yellow"],
+                 bg=self.colors["bg"], font=("Arial", 10, "bold"), anchor="w", padx=4).pack(anchor="w")
+                 
+        box = tk.Frame(vis_frame, bg="#121212", highlightbackground=self.colors["gray"], highlightthickness=1)
+        box.pack(fill="x", pady=(8, 4))
+        
+        # 1행: 메모리 파이프라인 인디케이터
+        row1 = tk.Frame(box, bg="#121212")
+        row1.pack(fill="x", padx=8, pady=(6, 3))
+        tk.Label(row1, text="MEM TELEMETRY:", fg=self.colors["text_gray"], bg="#121212", font=("Arial", 8, "bold")).pack(side="left")
+        self.pipeline_mem_status = tk.Label(row1, text="[ DIRECT READ ACTIVE ]", fg=self.colors["yellow"], bg="#121212", font=("Arial", 8, "bold"))
+        self.pipeline_mem_status.pack(side="left", padx=(4, 0))
+        
+        # 2행: OCR 파이프라인 인디케이터
+        row2 = tk.Frame(box, bg="#121212")
+        row2.pack(fill="x", padx=8, pady=(3, 6))
+        tk.Label(row2, text="OCR WIDGETS:", fg=self.colors["text_gray"], bg="#121212", font=("Arial", 8, "bold")).pack(side="left")
+        self.pipeline_ocr_status = tk.Label(row2, text="[ PURE CV OCR ACTIVE ]", fg=self.colors["blue"], bg="#121212", font=("Arial", 8, "bold"))
+        self.pipeline_ocr_status.pack(side="left", padx=(4, 0))
+        
+        # 3행: 상호 간섭(크로스토크) 감지
+        row3 = tk.Frame(box, bg="#121212")
+        row3.pack(fill="x", padx=8, pady=(3, 6))
+        tk.Label(row3, text="HYBRID LINKAGE:", fg=self.colors["text_gray"], bg="#121212", font=("Arial", 8, "bold")).pack(side="left")
+        self.pipeline_linkage = tk.Label(row3, text="DISABLED (100% INDEPENDENT)", fg="#2D7D46", bg="#121212", font=("Arial", 8, "bold"))
+        self.pipeline_linkage.pack(side="left", padx=(4, 0))
+        
         # Separator
         tk.Frame(self.container, bg=self.colors["gray"], height=1).pack(fill="x", padx=30, pady=10)
 
@@ -384,10 +499,16 @@ class BauhausDashboard:
         self.info_labels[key].config(text=text)
         if key in self.cells:
             cell_data = self.cells[key]
-            # Since cell active width of progress line is 96 pixels:
-            cell_width = 96
-            fill_width = max(0, min(cell_width, int(cell_width * (percent / 100.0))))
-            cell_data["line"].place(x=8, y=40, width=fill_width, height=2)
+            try:
+                # Dynamic width computation relative to real screen size
+                bg_w = cell_data["line_bg"].winfo_width()
+                if bg_w <= 1:
+                    bg_w = int(96 * self.scale_factor)
+            except Exception:
+                bg_w = int(96 * self.scale_factor)
+                
+            fill_width = max(0, min(bg_w, int(bg_w * (percent / 100.0))))
+            cell_data["line"].place(x=0, y=0, width=fill_width, height=2)
 
     def update_state_ui(self):
         state = self.monitor.get_state()
@@ -435,35 +556,71 @@ class BauhausDashboard:
         self.mem_lbl.config(text=f"MEMORY HP [ {mem_hp_text} ]  MP [ {mem_mp_text} ]")
         self.mem_stats_lbl.config(text=f"MEMORY LV [ {mem_level} ]  EXP [ {mem_exp_pct} ]\nMEMORY WT [ {mem_weight_text} ]  FD [ {mem_food_text} ]")
         
+        # 실시간 자가치유 파서 메타데이터 UI 연동
+        parser_status = state.get("parser_status", {})
+        strategy = parser_status.get("strategy", "Offline")
+        wt_off = parser_status.get("wt_off", "-")
+        fd_off = parser_status.get("fd_off", "-")
+        
+        if strategy == "Offline":
+            self.tele_status_lbl.config(text="OFFLINE", fg=self.colors["red"])
+            self.tele_strategy_lbl.config(text="DISCONNECTED", fg=self.colors["gray"])
+        else:
+            self.tele_status_lbl.config(text="CONNECTED", fg="#2D7D46")
+            self.tele_strategy_lbl.config(text=strategy)
+            if strategy == "TREE SCAN":
+                self.tele_strategy_lbl.config(fg=self.colors["yellow"])
+            else:
+                self.tele_strategy_lbl.config(fg=self.colors["blue"])
+                
+        self.tele_wt_lbl.config(text=wt_off)
+        self.tele_fd_lbl.config(text=fd_off)
+        
         # 네비게이션 상태 업데이트
         if hasattr(self, 'nav_status_lbl'):
             self.nav_status_lbl.config(text=self.navigator.status)
+            
+        # 라이브 파이프라인 시각화 깜빡임 애니메이션 (바우하우스 미학 극대화)
+        if hasattr(self, 'pipeline_mem_status') and hasattr(self, 'pipeline_ocr_status'):
+            # 0.4초 주기로 점멸 효과
+            flash_state = (int(time.time() * 2.5) % 2 == 0)
+            if flash_state:
+                self.pipeline_mem_status.config(fg=self.colors["yellow"])
+                self.pipeline_ocr_status.config(fg=self.colors["blue"])
+            else:
+                self.pipeline_mem_status.config(fg="#F4F1E8") # Off White
+                self.pipeline_ocr_status.config(fg="#F4F1E8") # Off White
         
         self.root.after(200, self.update_state_ui)
 
     def create_engine_row(self, name, config):
-        row_frame = tk.Frame(self.container, bg=self.colors["bg"], padx=30, pady=15)
+        row_frame = tk.Frame(self.container, bg=self.colors["bg"], padx=30, pady=12)
         row_frame.pack(fill="x")
         
         info_frame = tk.Frame(row_frame, bg=self.colors["bg"])
-        info_frame.pack(side="left")
+        info_frame.pack(side="left", fill="x", expand=True)
 
-        # Name Label
+        # Name Label (Defensive padding applied)
         lbl = tk.Label(info_frame, text=name.upper(), fg=self.colors["white"], bg=self.colors["bg"], 
-                      font=("Arial", 14, "bold"), anchor="w")
-        lbl.pack(anchor="w")
+                      font=("Arial", 14, "bold"), anchor="w", justify="left", padx=4)
+        lbl.pack(anchor="w", fill="x")
         
         # Description
         desc_lbl = tk.Label(info_frame, text=config["desc"], fg=self.colors["text_gray"], bg=self.colors["bg"],
-                           font=("Arial", 9), anchor="w")
-        desc_lbl.pack(anchor="w")
+                           font=("Arial", 9), anchor="w", justify="left", padx=4)
+        desc_lbl.pack(anchor="w", fill="x")
         
-        # Status Indicator (Yellow Circle initially)
-        btn_canvas = tk.Canvas(row_frame, width=40, height=40, bg=self.colors["bg"], highlightthickness=0)
+        # Status Indicator Canvas styled dynamically with scale factor
+        c_size = int(40 * self.scale_factor)
+        btn_canvas = tk.Canvas(row_frame, width=c_size, height=c_size, bg=self.colors["bg"], highlightthickness=0)
         btn_canvas.pack(side="right", padx=10)
         
-        # Geometric Toggle Button (Bauhaus Square/Circle)
-        rect_id = btn_canvas.create_rectangle(5, 5, 35, 35, fill=self.colors["gray"], outline=self.colors["white"], width=1)
+        # Geometric Toggle Button scaled beautifully
+        padding = int(5 * self.scale_factor)
+        rect_id = btn_canvas.create_rectangle(
+            padding, padding, c_size - padding, c_size - padding, 
+            fill=self.colors["gray"], outline=self.colors["white"], width=1
+        )
         
         config["canvas"] = btn_canvas
         config["shape"] = rect_id

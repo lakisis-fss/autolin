@@ -33,7 +33,7 @@ class CVStateReader:
             "AC":     {"x": 62,  "y": 104, "w": 33, "h": 15, "th": 120},
             "MR":     {"x": 158, "y": 104, "w": 35, "h": 15, "th": 120},
             "WEIGHT": {"x": 60,  "y": 145, "w": 35, "h": 15, "th": 120},
-            "FOOD":   {"x": 148, "y": 145, "w": 35, "h": 15, "th": 120},
+            "FOOD":   {"x": 142, "y": 145, "w": 48, "h": 15, "th": 120},
             "LAWFUL": {"x": 140, "y": 186, "w": 65, "h": 13, "th": 120}
         }
         
@@ -74,8 +74,19 @@ class CVStateReader:
             if res and len(res) > 0:
                 raw_val = res[0].get("rec_text", "").strip()
                 
-            # 3. Map typical OCR typos in low-res fonts
-            mapped_val = raw_val.replace("S", "7").replace("s", "7").replace("A", "0").replace("O", "0").replace("o", "0")
+            # 3. Map typical OCR typos in low-res fonts - 강력한 숫자화 전용 매핑 테이블 가동
+            mapped_val = raw_val
+            replace_map = {
+                "S": "7", "s": "7", "§": "7",
+                "A": "0", "O": "0", "o": "0", "D": "0", "Q": "0",
+                "l": "1", "I": "1", "i": "1", "T": "1", "t": "1", "J": "1",
+                "B": "8", "b": "8",
+                "G": "9", "g": "9",
+                "Z": "2", "z": "2",
+                "E": "5", "e": "5"
+            }
+            for char_to_rep, target_char in replace_map.items():
+                mapped_val = mapped_val.replace(char_to_rep, target_char)
             
             # 4. Strict cleaning keeping only allowed characters based on context
             if name in ["HP_Bar", "MP_Bar"]:
@@ -260,18 +271,21 @@ class CVStateReader:
                     if res and len(res) > 0:
                         raw_val = res[0].get("rec_text", "").strip()
                         
-                    # 3. Map typical OCR typos in low-res fonts
-                    mapped_val = raw_val.replace("S", "7").replace("s", "7").replace("A", "0").replace("O", "0").replace("o", "0")
-                    
-                    # Surgical visual correction for low-resolution font typos
-                    if name == "LEVEL" and mapped_val in ["12", "l2"]:
-                        mapped_val = "13"
-                    elif name == "MR" and mapped_val == "19":
-                        mapped_val = "10"
-                    elif name == "FOOD" and (mapped_val in ["11", "1"] or "1." in mapped_val or "11" in mapped_val):
-                        mapped_val = "17"
+                    # 3. Map typical OCR typos in low-res fonts - 강력한 숫자화 전용 매핑 테이블 가동
+                    mapped_val = raw_val
+                    replace_map = {
+                        "S": "7", "s": "7", "§": "7",
+                        "A": "0", "O": "0", "o": "0", "D": "0", "Q": "0",
+                        "l": "1", "I": "1", "i": "1", "T": "1", "t": "1", "J": "1",
+                        "B": "8", "b": "8",
+                        "G": "9", "g": "9",
+                        "Z": "2", "z": "2",
+                        "E": "5", "e": "5"
+                    }
+                    for char_to_rep, target_char in replace_map.items():
+                        mapped_val = mapped_val.replace(char_to_rep, target_char)
                         
-                    # 4. Strict cleaning keeping only allowed characters
+                    # 4. Strict cleaning keeping only allowed characters based on context
                     cleaned_val = re.sub(r"[^\d\.%-]", "", mapped_val)
                     
                     # 5. Format percent logic
@@ -285,9 +299,6 @@ class CVStateReader:
                             digits = re.sub(r"[^\d]", "", cleaned_val)
                             if len(digits) >= 5:
                                 cleaned_val = f"{digits[:-4]}.{digits[-4:]}%"
-                            
-                            if "11.4775" in cleaned_val:
-                                cleaned_val = cleaned_val.replace("11.4775", "11.9775")
                         
                     stats[name] = cleaned_val
                 # =========================================================================
