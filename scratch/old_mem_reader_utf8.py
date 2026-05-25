@@ -1,4 +1,4 @@
-import pymem
+﻿import pymem
 import pymem.process
 import pymem.pattern
 import time
@@ -12,26 +12,21 @@ class MemStateReader:
         self.pm = None
         self.base_address = 0
         
-        # AOB 스캐닝 하이브리드 엔진 변수
-        # 나중에 치트엔진으로 확실한 패턴을 찾으셨다면 이 곳에 b"\x48\x8B\x05....\x48\x8B\x88" 형태로 붙여넣으세요.
-        # 패턴이 비어있거나 스캔에 실패하면 fallback_offset을 자동으로 사용합니다.
+        # AOB ?ㅼ틦???섏씠釉뚮━???붿쭊 蹂??        # ?섏쨷??移섑듃?붿쭊?쇰줈 ?뺤떎???⑦꽩??李얠쑝?⑤떎硫???怨녹뿉 b"\x48\x8B\x05....\x48\x8B\x88" ?뺥깭濡?遺숈뿬?ｌ쑝?몄슂.
+        # ?⑦꽩??鍮꾩뼱?덇굅???ㅼ틪???ㅽ뙣?섎㈃ fallback_offset???먮룞?쇰줈 ?ъ슜?⑸땲??
         self.char_base_pattern = b"" 
         self.fallback_offset = 0x149b350
         self.dynamic_char_offset = self.fallback_offset
         
-        # 동적 캐릭터 프로필 데이터베이스
-        # 캐릭터 구조체 변환 감지용 오프셋 정보
+        # ?숈쟻 罹먮┃???꾨줈???곗씠?곕쿋?댁뒪
+        # 罹먮┃??援ъ“泥?蹂??媛먯????ㅽ봽???뺣낫
         self.profiles = {
             14: {
-                "level_off": 0x1c,      # LEVEL 오프셋
-                "exp_off": 0x28,        # EXP_Abs 오프셋
-                "lvl1_entry": 0xb0,
+                "level_off": 0x1c,      # LEVEL ?ㅽ봽??                "exp_off": 0x28,        # EXP_Abs ?ㅽ봽??                "lvl1_entry": 0xb0,
                 "lvl1_off": 0x28
             },
             11: {
-                "level_off": 0x2b8,     # LEVEL 오프셋
-                "exp_off": 0x2c4,       # EXP_Abs 오프셋
-                "lvl1_entry": 0xb0,
+                "level_off": 0x2b8,     # LEVEL ?ㅽ봽??                "exp_off": 0x2c4,       # EXP_Abs ?ㅽ봽??                "lvl1_entry": 0xb0,
                 "lvl1_off": 0x28
             }
         }
@@ -39,19 +34,19 @@ class MemStateReader:
         self.current_profile_lvl = 14
         self.last_attach_attempt = 0
         
-        # 하이브리드 경험치 캘리브레이션 정보 (사용 중단, 정적 테이블 사용)
+        # ?섏씠釉뚮━??寃쏀뿕移?罹섎━釉뚮젅?댁뀡 ?뺣낫 (?ъ슜 以묐떒, ?뺤쟻 ?뚯씠釉??ъ슜)
         self.exp_max_table = {
-            14: 7238687, # 레벨 14의 100% 도달 필요 경험치 (역산치)
-            11: 1800000  # 레벨 11 예시
+            14: 7238687, # ?덈꺼 14??100% ?꾨떖 ?꾩슂 寃쏀뿕移?(??궛移?
+            11: 1800000  # ?덈꺼 11 ?덉떆
         }
         
-        # 가방 무게 구조체 정규식(Regex) AOB 지문 (고정 뼈대 추적)
-        self.struct_aob_pattern = b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00.{4}\x00\x00\x84\x42\x00\x00\x00\x00.{8}\x01\x00\x00\x00\x00\x00\x84\x42\x00\x00\xb0\x41\x00\xa0\xc7\x44\x00\x40\x77\x44\x00\x00\x84\x42\x00\x00\xb0\x41"
+        # 媛諛?援ъ“泥?AOB 吏臾?(?ъ슜?먭? create_aob_helper.py 濡?異붿텧?섏뿬 ?ш린??遺숈뿬?ｌ쓬)
+        self.struct_aob_pattern = b"\x1f\x00\x00\x00\xb0\xac\x00\x00\x16\x00\x0c\x00\x00\x00\x00\x00"
         
-        # 포만도 구조체 정규식(Regex) AOB 지문 (고정 뼈대 추적)
-        self.struct_fd_aob_pattern = b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00.{4}\x00\x00\x84\x42\x00\x00\x00\x00.{8}\x01\x00\x00\x00\x00\x00\x84\x42\x00\x00\xb0\x41\x00\xc0\xb1\x44\x00\x00\x7d\x44\x00\x00\x84\x42\x00\x00\xb0\x41"
+        # ?щ쭔??援ъ“泥??꾩슜 AOB 吏臾?(臾닿쾶? ?꾩쟾???ㅻⅨ ?숈뿉 議댁옱??
+        self.struct_fd_aob_pattern = b"\x00\x00\x0c\x42\x00\x00\x84\x42\x00\x00\x00\x00\x10\xa3\x8e\xd0"
         
-        # 실시간 가방 무게 및 포만도 정독용 오프셋 캐시 (성능 최적화용)
+        # ?ㅼ떆媛?媛諛?臾닿쾶 諛??щ쭔???뺣룆???ㅽ봽??罹먯떆 (?깅뒫 理쒖쟻?붿슜)
         self.cached_offsets = {
             "lvl2_off": 0,
             "lvl3_wt_off": 0,
@@ -75,7 +70,7 @@ class MemStateReader:
             module = pymem.process.module_from_name(self.pm.process_handle, self.process_name)
             self.base_address = module.lpBaseOfDll
             
-            # 프로세스 연결 직후 AOB 스캐닝 엔진 가동 (1회성)
+            # ?꾨줈?몄뒪 ?곌껐 吏곹썑 AOB ?ㅼ틦???붿쭊 媛??(1?뚯꽦)
             self.find_dynamic_base_offset(module)
             
             return True
@@ -83,54 +78,54 @@ class MemStateReader:
             return False
 
     def find_dynamic_base_offset(self, module):
-        """AOB 스캐닝을 통해 게임 모듈(.text)에서 캐릭터 베이스 오프셋을 동적으로 추출합니다."""
+        """AOB ?ㅼ틦?앹쓣 ?듯빐 寃뚯엫 紐⑤뱢(.text)?먯꽌 罹먮┃??踰좎씠???ㅽ봽?뗭쓣 ?숈쟻?쇰줈 異붿텧?⑸땲??"""
         if not self.pm or not module:
             self.dynamic_char_offset = self.fallback_offset
             return
 
-        # 1. 사용자가 AOB 패턴을 입력하지 않았다면 스캔을 건너뛰고 기존 오프셋 사용 (안전 모드)
+        # 1. ?ъ슜?먭? AOB ?⑦꽩???낅젰?섏? ?딆븯?ㅻ㈃ ?ㅼ틪??嫄대꼫?곌퀬 湲곗〈 ?ㅽ봽???ъ슜 (?덉쟾 紐⑤뱶)
         if not self.char_base_pattern:
             self.dynamic_char_offset = self.fallback_offset
             return
 
         try:
-            print("[MemStateReader] AOB 스캐닝 가동 중...")
+            print("[MemStateReader] AOB ?ㅼ틦??媛??以?..")
             found_addr = pymem.pattern.pattern_scan_module(self.pm.process_handle, module, self.char_base_pattern)
             
             if found_addr:
-                # 64비트 RIP-relative 주소 계산 로직 (명령어 길이 7바이트, 변위 시작점 3바이트 가정)
-                # 실제 찾으신 어셈블리 패턴 명령어 구조에 맞게 이 부분을 미세 조정해야 할 수 있습니다.
+                # 64鍮꾪듃 RIP-relative 二쇱냼 怨꾩궛 濡쒖쭅 (紐낅졊??湲몄씠 7諛붿씠?? 蹂???쒖옉??3諛붿씠??媛??
+                # ?ㅼ젣 李얠쑝???댁뀍釉붾━ ?⑦꽩 紐낅졊??援ъ“??留욊쾶 ??遺遺꾩쓣 誘몄꽭 議곗젙?댁빞 ?????덉뒿?덈떎.
                 displacement = self.pm.read_int(found_addr + 3)
                 absolute_address = found_addr + 7 + displacement
                 new_offset = absolute_address - module.lpBaseOfDll
                 self.dynamic_char_offset = new_offset
-                print(f"[MemStateReader] AOB 스캔 성공! 동적 오프셋 획득: 0x{new_offset:x}")
+                print(f"[MemStateReader] AOB ?ㅼ틪 ?깃났! ?숈쟻 ?ㅽ봽???띾뱷: 0x{new_offset:x}")
             else:
-                print("[MemStateReader] AOB 스캔 실패: 패턴을 찾을 수 없습니다. 안전 모드로 가동합니다.")
+                print("[MemStateReader] AOB ?ㅼ틪 ?ㅽ뙣: ?⑦꽩??李얠쓣 ???놁뒿?덈떎. ?덉쟾 紐⑤뱶濡?媛?숉빀?덈떎.")
                 self.dynamic_char_offset = self.fallback_offset
         except Exception as e:
-            print(f"[MemStateReader] AOB 스캔 에러 ({e}). 안전 모드로 가동합니다.")
+            print(f"[MemStateReader] AOB ?ㅼ틪 ?먮윭 ({e}). ?덉쟾 紐⑤뱶濡?媛?숉빀?덈떎.")
             self.dynamic_char_offset = self.fallback_offset
 
     def detect_character_profile(self):
-        """캐릭터 구조체 정보를 실시간 판독하여 레벨 14 프로필인지 레벨 11 프로필인지 동적 선별"""
+        """罹먮┃??援ъ“泥??뺣낫瑜??ㅼ떆媛??먮룆?섏뿬 ?덈꺼 14 ?꾨줈?꾩씤吏 ?덈꺼 11 ?꾨줈?꾩씤吏 ?숈쟻 ?좊퀎"""
         if not self.pm:
             return
             
         try:
             char_base = self.base_address + self.dynamic_char_offset
             
-            # 1. 레벨 14 오프셋(0x1c) 검사 (현재 사용자 캐릭터인 레벨 14 최우선 판독)
+            # 1. ?덈꺼 14 ?ㅽ봽??0x1c) 寃??(?꾩옱 ?ъ슜??罹먮┃?곗씤 ?덈꺼 14 理쒖슦???먮룆)
             val_14 = self.pm.read_int(char_base + 0x1c)
             if val_14 == 14:
                 if self.current_profile_lvl != 14:
                     self.current_profile_lvl = 14
-                    # 프로필 전환 시 기존 캐시 강제 무효화하여 새로운 세션 캐시 수립 유도
+                    # ?꾨줈???꾪솚 ??湲곗〈 罹먯떆 媛뺤젣 臾댄슚?뷀븯???덈줈???몄뀡 罹먯떆 ?섎┰ ?좊룄
                     self.cached_offsets = {"lvl2_off": 0, "lvl3_wt_off": 0, "lvl3_fd_off": 0}
                     print(f"[MemStateReader] Profile auto-switched to Level 14 based on 0x1c detection.")
                 return
                 
-            # 2. 레벨 11 오프셋(0x2b8) 검사 (레벨 14가 확실히 아닐 때만 레벨 11로 안전 전환)
+            # 2. ?덈꺼 11 ?ㅽ봽??0x2b8) 寃??(?덈꺼 14媛 ?뺤떎???꾨땺 ?뚮쭔 ?덈꺼 11濡??덉쟾 ?꾪솚)
             val_11 = self.pm.read_int(char_base + 0x2b8)
             if val_11 == 11:
                 if self.current_profile_lvl != 11:
@@ -142,43 +137,45 @@ class MemStateReader:
             pass
 
     def update_exp_calibration(self, ocr_exp_str, current_level):
-        """[DEPRECATED] 정적 Max EXP 테이블을 사용하므로 더 이상 외부(OCR) 캘리브레이션에 의존하지 않습니다."""
+        """[DEPRECATED] ?뺤쟻 Max EXP ?뚯씠釉붿쓣 ?ъ슜?섎?濡????댁긽 ?몃?(OCR) 罹섎━釉뚮젅?댁뀡???섏〈?섏? ?딆뒿?덈떎."""
         pass
 
     def read_stealth_weight_food_via_tree_parser(self):
         """
-        초고속 실시간 AOB 힙 스캐너 (Global Heap AOB Scanner)
-        포인터 트리가 안티치트에 의해 은닉되었으므로 힙 영역 전체를 스캔합니다.
+        珥덇퀬???ㅼ떆媛?AOB ???ㅼ틦??(Global Heap AOB Scanner)
+        ?댁젣 蹂듭옟???ъ씤??泥댁씤???吏 ?딄퀬, ???곸뿭??????踰??꾩닔議곗궗?섏뿬
+        吏꾩쭨 臾닿쾶???덈? 二쇱냼瑜??곴뎄 罹먯떛?⑸땲??
         """
         if not self.pm:
-            return 0, 0.0
-
-        # --- 1. 초고속 캐시 읽기 ---
-        if self.cached_abs_wt_addr > 0 or self.cached_abs_fd_addr > 0:
-            weight = 0
-            food = 0.0
-            valid = True
+            return 0, 0
             
-            if self.cached_abs_wt_addr > 0:
-                try:
-                    weight = self.pm.read_float(self.cached_abs_wt_addr)
-                    if not (0.0 <= weight <= 200.0): valid = False
-                except: valid = False
+        if not self.struct_aob_pattern or len(self.struct_aob_pattern) < 8:
+            return 0, 0
+
+        # --- 1. 珥덇퀬??罹먯떆 ?쎄린 (1000 FPS) ---
+        if self.cached_abs_wt_addr > 0:
+            try:
+                weight = self.pm.read_int(self.cached_abs_wt_addr)
+                food = 0.0
+                if self.cached_abs_fd_addr > 0:
+                    try:
+                        food = self.pm.read_float(self.cached_abs_fd_addr)
+                    except:
+                        pass
                 
-            if self.cached_abs_fd_addr > 0:
-                try:
-                    food = self.pm.read_float(self.cached_abs_fd_addr)
-                    if not (0.0 <= food <= 120.0): valid = False
-                except: valid = False
-                
-            if valid:
-                return weight, food
-            else:
+                # ?좏슚??寃利?(臾닿쾶媛 0~100 ?ъ씠?멸??)
+                if 0 <= weight <= 100:
+                    return weight, food
+                else:
+                    # 臾댄슚?붾릺硫?罹먯떆 ??젣
+                    self.cached_abs_wt_addr = 0
+                    self.cached_abs_fd_addr = 0
+            except Exception:
                 self.cached_abs_wt_addr = 0
                 self.cached_abs_fd_addr = 0
 
-        # --- 2. 전역 힙 AOB 스캐닝 (초기 1회만 발생) ---
-        print("[MemStateReader] [!] 구조체 오프셋 이탈 감지! 전역 메모리 힙 AOB 스캐닝 돌입 (최초 1회만 발생)...")
+        # --- 2. ?꾩뿭 ??AOB ?ㅼ틦??(珥덇린 1?뚮쭔 諛쒖깮, ??0.5珥??뚯슂) ---
+        print("[MemStateReader] ?좑툘 援ъ“泥??ㅽ봽???댄깉 媛먯?! ?꾩뿭 硫붾え由???AOB ?ㅼ틦???뚯엯 (理쒖큹 1?뚮쭔 諛쒖깮)...")
         
         MEM_COMMIT = 0x1000
         PAGE_READWRITE = 0x04
@@ -199,45 +196,46 @@ class MemStateReader:
         mbi_struct = MB_STRUCT()
         
         addr = 0
-        wt_regex_pattern = re.compile(self.struct_aob_pattern) if self.struct_aob_pattern and b"." in self.struct_aob_pattern else None
-        fd_regex_pattern = re.compile(self.struct_fd_aob_pattern) if self.struct_fd_aob_pattern and b"." in self.struct_fd_aob_pattern else None
+        wt_fixed_pattern = self.struct_aob_pattern[4:] if self.struct_aob_pattern and len(self.struct_aob_pattern) >= 8 else None
+        fd_fixed_pattern = self.struct_fd_aob_pattern[4:] if self.struct_fd_aob_pattern and len(self.struct_fd_aob_pattern) >= 8 else None
         
         while ctypes.windll.kernel32.VirtualQueryEx(self.pm.process_handle, ctypes.c_void_p(addr), ctypes.byref(mbi_struct), ctypes.sizeof(mbi_struct)) > 0:
             if mbi_struct.State == MEM_COMMIT and mbi_struct.Protect in (PAGE_READWRITE, PAGE_EXECUTE_READWRITE):
                 try:
                     data = self.pm.read_bytes(addr, mbi_struct.RegionSize)
                     
-                    # 무게 AOB 정규식 스캔
-                    if self.cached_abs_wt_addr == 0 and wt_regex_pattern:
-                        match = wt_regex_pattern.search(data)
-                        if match:
-                            # 64바이트 중 우리가 원하는 값은 16바이트 오프셋(인덱스 16)에 위치함
-                            abs_wt_addr = addr + match.start() + 16
-                            try:
-                                w_val = self.pm.read_float(abs_wt_addr)
-                                if 0.0 <= w_val <= 200.0:
-                                    self.cached_abs_wt_addr = abs_wt_addr
-                                    print(f"[MemStateReader] [+] 정규식 AOB 무게 주소 포착: {hex(abs_wt_addr)}")
-                            except: pass
+                    # 臾닿쾶 AOB ?ㅼ틪
+                    if self.cached_abs_wt_addr == 0 and wt_fixed_pattern:
+                        idx_wt = data.find(wt_fixed_pattern)
+                        if idx_wt != -1:
+                            abs_wt_addr = addr + idx_wt - 4
+                            w_val = self.pm.read_int(abs_wt_addr)
+                            if 0 <= w_val <= 100:
+                                self.cached_abs_wt_addr = abs_wt_addr
+                                print(f"[MemStateReader] ??AOB 臾닿쾶 二쇱냼 ?ъ갑: {hex(abs_wt_addr)}")
 
-                    # 포만도 AOB 정규식 스캔
-                    if self.cached_abs_fd_addr == 0 and fd_regex_pattern:
-                        match = fd_regex_pattern.search(data)
-                        if match:
-                            abs_fd_addr = addr + match.start() + 16
+                    # ?щ쭔??AOB ?ㅼ틪 (?낅┰??
+                    if self.cached_abs_fd_addr == 0 and fd_fixed_pattern:
+                        idx_fd = data.find(fd_fixed_pattern)
+                        if idx_fd != -1:
+                            abs_fd_addr = addr + idx_fd - 4
                             try:
                                 f_val = self.pm.read_float(abs_fd_addr)
                                 if 0.0 <= f_val <= 120.0:
                                     self.cached_abs_fd_addr = abs_fd_addr
-                                    print(f"[MemStateReader] [+] 정규식 AOB 포만도 주소 포착: {hex(abs_fd_addr)}")
-                            except: pass
+                                    print(f"[MemStateReader] ??AOB ?щ쭔??二쇱냼 ?ъ갑: {hex(abs_fd_addr)}")
+                            except Exception:
+                                pass
                                 
-                    if (not wt_regex_pattern or self.cached_abs_wt_addr != 0) and (not fd_regex_pattern or self.cached_abs_fd_addr != 0):
+                    # ????李얠븯嫄곕굹, 李얠쓣 ???덈뒗 ?⑦꽩????李얠? 寃쎌슦 議곌린 醫낅즺
+                    if (not wt_fixed_pattern or self.cached_abs_wt_addr != 0) and (not fd_fixed_pattern or self.cached_abs_fd_addr != 0):
                         break
-                except: pass
+                        
+                except Exception:
+                    pass
             addr += mbi_struct.RegionSize
             
-        weight = self.pm.read_float(self.cached_abs_wt_addr) if self.cached_abs_wt_addr > 0 else 0.0
+        weight = self.pm.read_int(self.cached_abs_wt_addr) if self.cached_abs_wt_addr > 0 else 0
         try:
             food = self.pm.read_float(self.cached_abs_fd_addr) if self.cached_abs_fd_addr > 0 else 0.0
         except:
@@ -246,7 +244,7 @@ class MemStateReader:
 
     def read_stealth_exp_via_tree_parser(self, target_exp=None):
         """
-        [DEPRECATED] 정적 오프셋 롤백으로 더 이상 사용되지 않습니다.
+        [DEPRECATED] ?뺤쟻 ?ㅽ봽??濡ㅻ갚?쇰줈 ???댁긽 ?ъ슜?섏? ?딆뒿?덈떎.
         """
         return 0
 
@@ -256,7 +254,7 @@ class MemStateReader:
                 return None
 
         try:
-            # 0. 매 프레임마다 현재 캐릭터 프로필 자동 선별
+            # 0. 留??꾨젅?꾨쭏???꾩옱 罹먮┃???꾨줈???먮룞 ?좊퀎
             self.detect_character_profile()
             
             profile = self.profiles.get(self.current_profile_lvl)
@@ -265,30 +263,30 @@ class MemStateReader:
                 
             char_base = self.base_address + self.dynamic_char_offset
             
-            # 1. 체력, 마나, 레벨, 절대경험치 획득
+            # 1. 泥대젰, 留덈굹, ?덈꺼, ?덈?寃쏀뿕移??띾뱷
             hp = self.pm.read_int(char_base + 0xc)
             max_hp = self.pm.read_int(char_base + 0x10)
             mp = self.pm.read_int(char_base + 0x14)
             max_mp = self.pm.read_int(char_base + 0x18)
             level = self.pm.read_int(char_base + profile["level_off"])
             
-            # 절대 경험치를 정적으로 직접 정독 (상호 참조 힌트 없이 순수 메모리 정독)
+            # ?덈? 寃쏀뿕移섎? ?뺤쟻?쇰줈 吏곸젒 ?뺣룆 (?곹샇 李몄“ ?뚰듃 ?놁씠 ?쒖닔 硫붾え由??뺣룆)
             exp_abs = self.pm.read_int(char_base + profile["exp_off"])
             
-            # 2. 초고속 실시간 트리 해석 파서를 통해 가방 무게/포만감 정독 (힌트 없이 스스로 동적 역추적)
+            # 2. 珥덇퀬???ㅼ떆媛??몃━ ?댁꽍 ?뚯꽌瑜??듯빐 媛諛?臾닿쾶/?щ쭔媛??뺣룆 (?뚰듃 ?놁씠 ?ㅼ뒪濡??숈쟻 ??텛??
             weight, food = self.read_stealth_weight_food_via_tree_parser()
             
-            # 3. 실시간 좌표 및 방향 해독
+            # 3. ?ㅼ떆媛?醫뚰몴 諛?諛⑺뼢 ?대룆
             pos_x = self.pm.read_int(char_base + 0x0)
             pos_y = self.pm.read_int(char_base + 0x4)
             heading_val = self.pm.read_int(char_base + 0x8)
             
-            # 유효성 검사 및 정제
+            # ?좏슚??寃??諛??뺤젣
             if hp < 0 or hp > 100000: hp = 0
             if max_hp <= 0: max_hp = 100
             if mp < 0 or mp > 100000: mp = 0
             if max_mp <= 0: max_mp = 100
-            if weight < 0.0 or weight > 200.0: weight = 0.0
+            if weight < 0 or weight > 100: weight = 0
             if food < 0 or food > 1200: food = 0
             if level < 1 or level > 99: level = 1
             if exp_abs < 0: exp_abs = 0
@@ -299,7 +297,7 @@ class MemStateReader:
             mp_pct = (mp / max_mp) * 100.0
             weight_pct = float(weight)
             
-            # 경험치 비율 결정 (순수 메모리 정적 Max EXP 테이블 사용)
+            # 寃쏀뿕移?鍮꾩쑉 寃곗젙 (?쒖닔 硫붾え由??뺤쟻 Max EXP ?뚯씠釉??ъ슜)
             max_exp = self.exp_max_table.get(level, 0)
             if max_exp > 0:
                 exp_pct = (exp_abs / float(max_exp)) * 100.0
@@ -309,20 +307,20 @@ class MemStateReader:
             if exp_pct > 100.0: exp_pct = 99.9999
             exp_str = f"{exp_pct:.4f}%"
                 
-            # 방향 매핑
+            # 諛⑺뼢 留ㅽ븨
             dir_map = {
-                0: "북 ⬆️",
-                1: "북동 ↗️",
-                2: "동 ➡️",
-                3: "남동 ↘️",
-                4: "남 ⬇️",
-                5: "남서 ↙️",
-                6: "서 ⬅️",
-                7: "북서 ↖️"
+                0: "遺?燧놅툘",
+                1: "遺곷룞 ?쀯툘",
+                2: "???∽툘",
+                3: "?⑤룞 ?섓툘",
+                4: "??燧뉛툘",
+                5: "?⑥꽌 ?숋툘",
+                6: "??燧낉툘",
+                7: "遺곸꽌 ?뽳툘"
             }
             direction_str = dir_map.get(heading_val, "-")
             
-            # 실시간 자가치유 파서 메타데이터 디버그 정보 수집
+            # ?ㅼ떆媛??먭?移섏쑀 ?뚯꽌 硫뷀??곗씠???붾쾭洹??뺣낫 ?섏쭛
             strategy = "OFFSET CACHE" if self.cached_offsets["lvl3_wt_off"] > 0 else "TREE SCAN"
             wt_off_hex = hex(self.cached_offsets["lvl3_wt_off"]) if self.cached_offsets["lvl3_wt_off"] > 0 else "-"
             fd_off_hex = hex(self.cached_offsets["lvl3_fd_off"]) if self.cached_offsets["lvl3_fd_off"] > 0 else "-"
@@ -339,8 +337,8 @@ class MemStateReader:
             return {
                 "hp": {"percent": hp_pct, "text": f"{hp}/{max_hp}"},
                 "mp": {"percent": mp_pct, "text": f"{mp}/{max_mp}"},
-                "weight": {"percent": weight_pct, "text": f"{weight:.2f}%"},
-                "food": {"percent": float(food), "text": f"{food:.2f}%"},
+                "weight": {"percent": weight_pct, "text": f"{weight}%"},
+                "food": {"percent": float(food), "text": f"{food}%"},
                 "coords": f"{pos_x}, {pos_y}",
                 "direction": direction_str,
                 "level": level,

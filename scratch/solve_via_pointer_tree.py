@@ -102,10 +102,10 @@ def patch_mem_state_reader(levels, wt_off, fd_off):
                             lvl3 = self.pm.read_longlong(lvl2 + self.weight_chain["lvl2_off"])
                             if lvl3 > 0:
                                 weight = self.pm.read_int(lvl3 + self.weight_chain["lvl3_wt_off"])
-                                food = self.pm.read_int(lvl3 + self.weight_chain["lvl3_fd_off"])
+                                food = self.pm.read_float(lvl3 + self.weight_chain["lvl3_fd_off"])
                         else:
                             weight = self.pm.read_int(lvl2 + self.weight_chain["lvl3_wt_off"])
-                            food = self.pm.read_int(lvl2 + self.weight_chain["lvl3_fd_off"])"""
+                            food = self.pm.read_float(lvl2 + self.weight_chain["lvl3_fd_off"])"""
                             
         content = content.replace(old_read_block, new_read_block)
         
@@ -123,10 +123,10 @@ def patch_mem_state_reader(levels, wt_off, fd_off):
                                 lvl3 = self.pm.read_longlong(lvl2 + self.weight_chain["lvl2_off"])
                                 if lvl3 > 0:
                                     weight = self.pm.read_int(lvl3 + self.weight_chain["lvl3_wt_off"])
-                                    food = self.pm.read_int(lvl3 + self.weight_chain["lvl3_fd_off"])
+                                    food = self.pm.read_float(lvl3 + self.weight_chain["lvl3_fd_off"])
                             else:
                                 weight = self.pm.read_int(lvl2 + self.weight_chain["lvl3_wt_off"])
-                                food = self.pm.read_int(lvl2 + self.weight_chain["lvl3_fd_off"])"""
+                                food = self.pm.read_float(lvl2 + self.weight_chain["lvl3_fd_off"])"""
                                 
         content = content.replace(old_heal_block, new_heal_block)
         
